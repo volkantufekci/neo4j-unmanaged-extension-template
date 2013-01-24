@@ -1,12 +1,16 @@
 package org.neo4j.example.unmanagedextension;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -20,17 +24,126 @@ import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.neo4j.cypher.javacompat.ExecutionEngine;
 import org.neo4j.cypher.javacompat.ExecutionResult;
-import org.neo4j.graphdb.Direction;
-import org.neo4j.graphdb.DynamicRelationshipType;
 import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.traversal.Evaluators;
-import org.neo4j.graphdb.traversal.TraversalDescription;
-import org.neo4j.kernel.Traversal;
+import org.neo4j.kernel.impl.util.StringLogger;
+
+import com.volkan.Utility;
+import com.volkan.db.H2Helper;
+import com.volkan.interpartitiontraverse.TraverseHelper;
+import com.volkan.interpartitiontraverse.TraverseHelperAsync;
+
 
 @Path("/service")
 public class MyService {
 
+	private final StringLogger neo4jLogger = StringLogger.logger(Utility.buildLogFileName());
+	
+	@POST
+	@Path("/volkan")
+	public Response postVolkan(@Context GraphDatabaseService db, InputStream is)
+			throws IOException {
+
+		List<String> resultJson 	= new ArrayList<String>();
+
+		ObjectMapper mapper = new ObjectMapper();
+		try {
+			Map<String, Object> jsonMap	= convertJsonToMap(is, mapper);
+			
+			TraverseHelper traverseHelper = new TraverseHelper();
+			resultJson = traverseHelper.traverse(db, jsonMap);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		return Response.ok().entity(mapper.writeValueAsString(resultJson)).build();
+	}
+
+	@POST
+	@Path("/volkan_async")
+	public Response postVolkanAsync(@Context GraphDatabaseService db, InputStream is)
+			throws IOException {
+
+		H2Helper h2Helper 	= null;
+		String error 		= "";
+		ObjectMapper mapper	= new ObjectMapper();
+		try {
+			Map<String, Object> jsonMap	= convertJsonToMap(is, mapper);
+			
+			h2Helper = new H2Helper();
+			TraverseHelperAsync traverseHelper = new TraverseHelperAsync(h2Helper);
+			traverseHelper.traverse(db, jsonMap);
+		} catch (IOException | ClassNotFoundException | SQLException e) {
+			error = e.toString();
+			neo4jLogger.logMessage(e.toString(), true);
+		} finally {
+			if(h2Helper != null)
+				try {
+					h2Helper.closeConnection();
+				} catch (SQLException e) {
+					error += e.toString();
+					neo4jLogger.logMessage(e.toString(), true);
+				}
+		}
+		
+		if (error.isEmpty()) {
+			error = "No error occurred";
+		} 
+		return Response.ok().entity(error).build();
+	}
+	
+	@GET
+	@Path("/properties")
+	public String getProperties(){
+		StringBuilder sb = new StringBuilder();
+		FileInputStream in = null;
+		try {
+			in = new FileInputStream("conf/neo4j-server.properties");
+			Properties properties = new Properties();
+			properties.load(in);
+			for (Object string : properties.values()) {
+				sb.append(string + "\n");
+			}
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			if (in != null) {
+				try {
+					in.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		
+		return sb.toString();
+	}
+	
+	@SuppressWarnings("unchecked")
+	private Map<String, Object> convertJsonToMap(InputStream is, ObjectMapper mapper) 
+			throws IOException, JsonParseException, JsonMappingException {
+		Map<String, Object> inputMap;
+		String input 	= readFromStream(is);
+		neo4jLogger.logMessage(input);
+		inputMap 		= mapper.readValue(input, Map.class);
+		return inputMap;
+	}
+
+	private String readFromStream(InputStream stream) throws IOException {
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		byte[] buffer = new byte[1000];
+		int wasRead = 0;
+		do {
+			wasRead = stream.read(buffer);
+			if (wasRead > 0) {
+				baos.write(buffer, 0, wasRead);
+			}
+		} while (wasRead > -1);
+
+		return new String(baos.toByteArray());
+	}
+	
     @GET
     @Path("/helloworld")
     public String helloWorld() {
@@ -66,92 +179,4 @@ public class MyService {
         ObjectMapper objectMapper = new ObjectMapper();
         return Response.ok().entity(objectMapper.writeValueAsString(friends)).build();
     }
-
-	@POST
-	@Path("/volkan")
-	public Response postVolkan(@Context GraphDatabaseService db, InputStream is)
-			throws IOException {
-
-		Map<String, Object> inputMap	= null;
-		List<String> resultJson 		= new ArrayList<String>();
-
-		ObjectMapper mapper = new ObjectMapper();
-		try {
-			inputMap = convertJsonToMap(is, mapper);
-			
-			TraversalDescription traversalDesc = Traversal.description();
-			traversalDesc = addDepth(inputMap, traversalDesc);
-			traversalDesc = addRelationships(inputMap, traversalDesc);
-
-			resultJson = traverse(db, inputMap, traversalDesc);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-
-		return Response.ok().entity(mapper.writeValueAsString(resultJson)).build();
-	}
-
-	private List<String> traverse(GraphDatabaseService db, Map<String, Object> inputMap, 
-							TraversalDescription traversal) {
-		List<String> resultJson = new ArrayList<String>();
-		Node startNode = db.getNodeById((int) inputMap.get("start_node"));
-		
-		for (Node node : traversal.traverse(startNode).nodes()) {
-			String name = (String) node.getProperty("name");
-			resultJson.add(name);
-		}
-		
-		return resultJson;
-	}
-
-	private Map<String, Object> convertJsonToMap(InputStream is, ObjectMapper mapper) 
-			throws IOException, JsonParseException, JsonMappingException {
-		Map<String, Object> inputMap;
-		String input 	= readFromStream(is);
-		inputMap 		= mapper.readValue(input, Map.class);
-		return inputMap;
-	}
-
-	private TraversalDescription addDepth(
-				Map<String, Object> jsonMap, TraversalDescription traversal) {
-		int depth = (Integer) jsonMap.get("depth");
-		return traversal.evaluator(Evaluators.atDepth(depth));
-	}
-
-	private TraversalDescription addRelationships(Map<String, Object> jsonMap,
-			TraversalDescription traversal) {
-		for (Map<String, String> rel : (List<Map<String, String>>) jsonMap.get("relationships")) {
-			String relationName = rel.get("type");
-			Direction direction = findOutDirection(rel);
-			traversal = traversal.relationships(
-					DynamicRelationshipType.withName(relationName),
-					direction);
-		}
-		return traversal;
-	}
-
-	private String readFromStream(InputStream stream) throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		byte[] buffer = new byte[1000];
-		int wasRead = 0;
-		do {
-			wasRead = stream.read(buffer);
-			if (wasRead > 0) {
-				baos.write(buffer, 0, wasRead);
-			}
-		} while (wasRead > -1);
-
-		return new String(baos.toByteArray());
-	}
-
-	private Direction findOutDirection(Map<String, String> rel) {
-		String directionString = rel.get("direction");
-		Direction direction = null;
-		if (directionString.equalsIgnoreCase("IN")) {
-			direction = Direction.INCOMING;
-		} else {
-			direction = Direction.OUTGOING;
-		}
-		return direction;
-	}
 }
