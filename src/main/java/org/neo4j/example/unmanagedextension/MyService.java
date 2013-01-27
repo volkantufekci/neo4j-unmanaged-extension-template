@@ -97,11 +97,12 @@ public class MyService {
 		StringBuilder sb = new StringBuilder();
 		FileInputStream in = null;
 		try {
-			in = new FileInputStream("conf/neo4j-server.properties");
+//			in = new FileInputStream("conf/neo4j-server.properties");
+			in = new FileInputStream("conf/interpartitiontraverse.properties");
 			Properties properties = new Properties();
 			properties.load(in);
-			for (Object string : properties.values()) {
-				sb.append(string + "\n");
+			for (Object string : properties.keySet()) {
+				sb.append(string + "=" + properties.getProperty((String) string) + "\n");
 			}
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
