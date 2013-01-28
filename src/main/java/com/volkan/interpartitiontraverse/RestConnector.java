@@ -10,7 +10,7 @@ import com.sun.jersey.api.client.ClientHandlerException;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.UniformInterfaceException;
 import com.sun.jersey.api.client.WebResource;
-import com.volkan.Configuration;
+import com.volkan.Utility;
 
 public class RestConnector {
 	private String urlHostAndPort;
@@ -20,8 +20,7 @@ public class RestConnector {
 	}
 	
 	public RestConnector(String port) {
-		//TODO BASE_URL, Properties'ten okunacak bir yapiya donusturulmeli
-		urlHostAndPort = Configuration.BASE_URL_OF_NEO4J_INSTANCES + ":" + port + "/";
+		urlHostAndPort = Utility.getNeo4jURLFromPropertiesForPort(port);
 	}
 	
 	public String delegateQuery(Map<String,Object> jsonMap){
