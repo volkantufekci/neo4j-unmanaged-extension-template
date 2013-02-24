@@ -29,6 +29,7 @@ import org.neo4j.kernel.impl.util.StringLogger;
 
 import com.volkan.Utility;
 import com.volkan.db.H2Helper;
+import com.volkan.interpartitiontraverse.JsonKeyConstants;
 import com.volkan.interpartitiontraverse.TraverseHelper;
 import com.volkan.interpartitiontraverse.TraverseHelperAsync;
 
@@ -66,15 +67,22 @@ public class MyService {
 		H2Helper h2Helper 	= null;
 		String error 		= "";
 		ObjectMapper mapper	= new ObjectMapper();
+		Map<String, Object> jsonMap = null;
 		try {
-			Map<String, Object> jsonMap	= convertJsonToMap(is, mapper);
-			
+			jsonMap	 = convertJsonToMap(is, mapper);
 			h2Helper = new H2Helper();
 			TraverseHelperAsync traverseHelper = new TraverseHelperAsync(h2Helper);
 			traverseHelper.traverse(db, jsonMap);
-		} catch (IOException | ClassNotFoundException | SQLException e) {
+		} catch (Exception e) {
 			error = e.toString();
 			neo4jLogger.logMessage(e.toString(), true);
+			
+			long jobID = (int) jsonMap.get(JsonKeyConstants.JOB_ID);
+			try {
+				h2Helper.updateJobWithResults(jobID, "jobID:" + jobID + " CAKILDI");
+			} catch (SQLException e1) {
+				neo4jLogger.logMessage(e1.toString(), true);
+			}
 		} finally {
 			if(h2Helper != null)
 				try {
@@ -87,8 +95,12 @@ public class MyService {
 		
 		if (error.isEmpty()) {
 			error = "No error occurred";
+			return Response.ok().entity(error).build();
 		} 
-		return Response.ok().entity(error).build();
+		else {
+			return Response.serverError().entity(error).build();
+		}
+			
 	}
 	
 	@GET
