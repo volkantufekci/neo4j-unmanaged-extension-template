@@ -60,7 +60,7 @@ public class TraversalDescriptionBuilder {
 	}
 	
 	private void addUniqueness() {
-		traversalDescription = traversalDescription.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL);
+		traversalDescription = traversalDescription.uniqueness(Uniqueness.NODE_GLOBAL);
 	}
 	
 	public TraversalDescription build() {
