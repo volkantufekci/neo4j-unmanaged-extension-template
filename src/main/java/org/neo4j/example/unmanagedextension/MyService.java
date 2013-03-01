@@ -77,11 +77,17 @@ public class MyService {
 			error = e.toString();
 			neo4jLogger.logMessage(e.toString(), true);
 			
+			String aapn = "NaN";
+			try {
+				aapn = Utility.getAutomaticallyAssignedPortNumber();
+			} catch (IOException e1) {
+				neo4jLogger.logMessage("AAPN is not accessible\n"+e1.toString());
+			}
 			long jobID = (int) jsonMap.get(JsonKeyConstants.JOB_ID);
 			try {
-				h2Helper.updateJobWithResults(jobID, "jobID:" + jobID + " CAKILDI");
+				h2Helper.updateJobWithResults(jobID, aapn+" - jobID:" + jobID + " CAKILDI ");
 			} catch (SQLException e1) {
-				neo4jLogger.logMessage(e1.toString(), true);
+				neo4jLogger.logMessage(aapn +" H2Helper error: " + e1.toString(), true);
 			}
 		} finally {
 			if(h2Helper != null)
