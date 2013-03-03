@@ -83,7 +83,7 @@ public class MyService {
 			} catch (IOException e1) {
 				neo4jLogger.logMessage("AAPN is not accessible\n"+e1.toString());
 			}
-			long jobID = (long) jsonMap.get(JsonKeyConstants.JOB_ID);
+			long jobID = Long.parseLong(jsonMap.get(JsonKeyConstants.JOB_ID).toString());
 			try {
 				h2Helper.updateJobWithResults(jobID, aapn+" - jobID:" + jobID + " CAKILDI ");
 			} catch (SQLException e1) {
